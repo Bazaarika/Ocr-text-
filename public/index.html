@@ -82,6 +82,7 @@
           <button id="chatSendBtn" class="btn">Send</button>
         </div>
       </div>
+      
       <footer>Powered by <strong>Tesseract.js</strong> and a backend AI.</footer>
     </div>
   </div>
@@ -189,10 +190,13 @@
       worker = null;
     }
 
-    // --- NEW: Function to ask AI a question ---
+    // --- FIX: Backend URL को यहाँ जोड़ें ---
+    // अपनी Render Web Service का URL यहाँ डालें (उदाहरण: https://my-ocr-backend.onrender.com)
+    const BACKEND_URL = 'https://ocr-text.onrender.com'; 
+
     async function getAIResponse(prompt) {
       try {
-        const response = await fetch('/ask-ai', {
+        const response = await fetch(`${BACKEND_URL}/ask-ai`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -200,13 +204,13 @@
           body: JSON.stringify({ prompt: prompt }),
         });
         const data = await response.json();
-        return data.answer || 'No answer from AI. Please check the backend server.';
+        return data.answer || 'No answer from AI. Please check the backend server logs.';
       } catch (error) {
         console.error('Error:', error);
-        return 'Failed to get a response from AI. The backend server might be down.';
+        return 'Failed to get a response from AI. The backend server might be down or URL is incorrect.';
       }
     }
-    // --- END NEW ---
+    // --- END FIX ---
 
     startBtn.addEventListener('click', async ()=>{
       if (files.length === 0){ alert('Please select or drop at least one image first.'); return; }
@@ -229,7 +233,6 @@
           progBar.style.width = '0%';
         }
 
-        // Ask AI for an answer based on combined text
         if (combinedText.trim().length > 0) {
           output.value += `\n\n--- Asking AI for an answer... ---\n`;
           const aiAnswer = await getAIResponse(combinedText);
@@ -249,7 +252,6 @@
 
     stopBtn.addEventListener('click', ()=>{ isRunning = false; stopBtn.style.display='none'; startBtn.style.display='inline-block'; filesInfo.textContent='Stopped by user'; stopWorker(); });
 
-    // --- NEW: Chat Logic ---
     chatSendBtn.addEventListener('click', async () => {
       const prompt = chatInput.value.trim();
       if (prompt === "") {
@@ -279,14 +281,12 @@
       chatOutput.scrollTop = chatOutput.scrollHeight;
     });
 
-    // Send on Enter key press
     chatInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             chatSendBtn.click();
         }
     });
-    // --- END NEW ---
 
     copyBtn.addEventListener('click', async ()=>{
       try{ await navigator.clipboard.writeText(output.value); alert('Copied to clipboard'); }catch(e){ alert('Copy failed — your browser may block clipboard access.'); }
