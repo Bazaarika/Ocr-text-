@@ -1,27 +1,20 @@
 // server.js
 const express = require('express');
-const cors = require('cors'); // CORS के लिए
+const cors = require('cors');
 const { Configuration, OpenAIApi } = require('openai');
-require('dotenv').config(); // .env फ़ाइल से variables लोड करने के लिए
+require('dotenv').config();
 
 const app = express();
 
-// CORS सक्षम करें ताकि आपका फ्रंटएंड बैकएंड से बात कर सके
 app.use(cors()); 
-
-// JSON data को parse करने के लिए
 app.use(express.json()); 
-
-// अपनी static files (जैसे index.html) को serve करने के लिए
 app.use(express.static('public'));
 
-// API Key को environment variable से प्राप्त करें
 const configuration = new Configuration({
     apiKey: process.env.OPENAI_API_KEY,
 });
 const openai = new OpenAIApi(configuration);
 
-// API endpoint जो AI से सवाल पूछेगा
 app.post('/ask-ai', async (req, res) => {
     const userPrompt = req.body.prompt;
     if (!userPrompt) {
@@ -41,7 +34,6 @@ app.post('/ask-ai', async (req, res) => {
     }
 });
 
-// Render dynamic port को हैंडल करने के लिए
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
     console.log(`Server listening on port ${port}`);
