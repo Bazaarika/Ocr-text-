@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Instant Image → Text (OCR) with AI — Bazaarika Tool</title>
+  <title>Instant Image → Text (OCR) with AI & Live Chat</title>
   <style>
     :root{--bg:#0f172a;--card:#0b1220;--accent:#10b981;--muted:#94a3b8;color-scheme: dark}
     html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,system-ui,-apple-system;background:linear-gradient(180deg,#071025 0%, #07172b 100%);color:#e6eef8}
@@ -23,7 +23,12 @@
     textarea{width:100%;min-height:280px;margin-top:12px;padding:12px;border-radius:10px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.03);color:inherit;font-size:14px}
     .row{display:flex;gap:12px}
     .select{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);color:inherit}
-
+    
+    .chat-section{margin-top:20px;padding:18px;background:rgba(255,255,255,0.03);border-radius:12px;box-shadow:0 6px 24px rgba(2,6,23,0.6)}
+    .chat-output{min-height:200px;max-height:400px;overflow-y:auto;border:1px solid rgba(255,255,255,0.03);border-radius:8px;padding:12px;background:rgba(0,0,0,0.4);margin-bottom:12px;white-space:pre-wrap;font-size:14px}
+    .chat-input-row{display:flex;gap:10px;margin-top:12px}
+    .chat-input-row textarea{min-height:50px;margin:0;flex:1}
+    
     footer{margin-top:12px;color:var(--muted);font-size:13px}
     @media (max-width:680px){.row{flex-direction:column}.thumb{width:100%;height:160px}}
   </style>
@@ -32,7 +37,7 @@
   <div class="wrap">
     <div class="card">
       <h1>Instant Image → Text (OCR) with AI</h1>
-      <p class="lead">Upload or drop images (multiple supported) to extract text and get an AI answer.</p>
+      <p class="lead">Upload or drop images to extract text and get an AI answer. For best results, ask a clear question in the image text.</p>
 
       <div class="controls">
         <input id="fileInput" type="file" accept="image/*" multiple style="display:none"/>
@@ -61,14 +66,22 @@
         </div>
       </div>
 
-      <textarea id="output" placeholder="Extracted text and AI response will appear here..." spellcheck="false"></textarea>
+      <textarea id="output" placeholder="Extracted text from images will appear here..." spellcheck="false"></textarea>
 
       <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
-        <button id="copyBtn" class="btn secondary">Copy</button>
+        <button id="copyBtn" class="btn secondary">Copy OCR Text</button>
         <button id="downloadBtn" class="btn">Download .txt</button>
-        <button id="clearOutputBtn" class="btn secondary">Clear Output</button>
+        <button id="clearOutputBtn" class="btn secondary">Clear OCR Output</button>
       </div>
-
+      
+      <div class="chat-section">
+        <h2>Live Chat with AI</h2>
+        <div id="chatOutput" class="chat-output"></div>
+        <div class="chat-input-row">
+          <textarea id="chatInput" placeholder="Ask AI a question..."></textarea>
+          <button id="chatSendBtn" class="btn">Send</button>
+        </div>
+      </div>
       <footer>Powered by <strong>Tesseract.js</strong> and a backend AI.</footer>
     </div>
   </div>
@@ -92,6 +105,11 @@
     const dropzone = document.getElementById('dropzone');
     const langSel = document.getElementById('langSel');
 
+    // New Chat elements
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+    const chatOutput = document.getElementById('chatOutput');
+
     let files = [];
     let worker = null;
     let isRunning = false;
@@ -111,24 +129,22 @@
     pickBtn.addEventListener('click', ()=> fileInput.click());
     fileInput.addEventListener('change', e=>{
       const chosen = Array.from(e.target.files);
-      files = files.concat(chosen); // Append new files to the existing array
+      files = files.concat(chosen);
       filesInfo.textContent = humanFiles();
       if (files.length > 0) showPreview(files[0]);
     });
 
-    // Drag & drop
     ['dragenter','dragover'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.style.borderColor = '#2dd4bf' }));
     ['dragleave','drop'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.style.borderColor='rgba(255,255,255,0.05)'}));
     dropzone.addEventListener('drop', e=>{
       const dt = e.dataTransfer;
       if (!dt) return;
       const dropped = Array.from(dt.files || []).filter(f=> f.type && f.type.startsWith('image'));
-      files = files.concat(dropped); // Append new files to the existing array
+      files = files.concat(dropped);
       filesInfo.textContent = humanFiles();
       if (files.length > 0) showPreview(files[0]);
     });
 
-    // Paste image from clipboard (mobile & desktop supported where browser allows)
     pasteBtn.addEventListener('click', async ()=>{
       try{
         const items = await navigator.clipboard.read();
@@ -147,13 +163,13 @@
     });
 
     clearBtn.addEventListener('click', ()=>{ files = []; preview.style.display='none'; filesInfo.textContent = humanFiles(); progBar.style.width='0%'; output.value=''; });
+    clearOutputBtn.addEventListener('click', ()=> output.value='');
 
     // OCR flow using Tesseract.js worker
     async function initWorker(){
       if (worker) return worker;
       worker = Tesseract.createWorker({
         logger: m => {
-          // update progress bar
           if (m.status === 'recognizing text' || m.status === 'loading tesseract core' || m.status === 'initializing tesseract'){ 
             const p = Math.round((m.progress || 0) * 100);
             progBar.style.width = p + '%';
@@ -175,7 +191,6 @@
 
     // --- NEW: Function to ask AI a question ---
     async function getAIResponse(prompt) {
-      output.value += '\n\n---\n\nAsking AI... Please wait...';
       try {
         const response = await fetch('/ask-ai', {
           method: 'POST',
@@ -185,10 +200,10 @@
           body: JSON.stringify({ prompt: prompt }),
         });
         const data = await response.json();
-        return data.answer || 'No answer from AI.';
+        return data.answer || 'No answer from AI. Please check the backend server.';
       } catch (error) {
         console.error('Error:', error);
-        return 'Failed to get a response from AI.';
+        return 'Failed to get a response from AI. The backend server might be down.';
       }
     }
     // --- END NEW ---
@@ -214,12 +229,12 @@
           progBar.style.width = '0%';
         }
 
-        // --- NEW: Ask AI for an answer based on combined text ---
+        // Ask AI for an answer based on combined text
         if (combinedText.trim().length > 0) {
+          output.value += `\n\n--- Asking AI for an answer... ---\n`;
           const aiAnswer = await getAIResponse(combinedText);
           output.value += `\n\n--- AI Response ---\n\n` + aiAnswer;
         }
-        // --- END NEW ---
 
       }catch(err){
         console.error(err); 
@@ -234,11 +249,48 @@
 
     stopBtn.addEventListener('click', ()=>{ isRunning = false; stopBtn.style.display='none'; startBtn.style.display='inline-block'; filesInfo.textContent='Stopped by user'; stopWorker(); });
 
+    // --- NEW: Chat Logic ---
+    chatSendBtn.addEventListener('click', async () => {
+      const prompt = chatInput.value.trim();
+      if (prompt === "") {
+        alert('Please type a question to chat with AI.');
+        return;
+      }
+
+      chatInput.disabled = true;
+      chatSendBtn.disabled = true;
+      chatOutput.innerHTML += `<b>You:</b> ${prompt}\n\n`;
+
+      const loadingMessage = document.createElement('div');
+      loadingMessage.textContent = 'AI is thinking...';
+      loadingMessage.style.color = 'var(--muted)';
+      chatOutput.appendChild(loadingMessage);
+      chatOutput.scrollTop = chatOutput.scrollHeight;
+
+      const aiAnswer = await getAIResponse(prompt);
+
+      loadingMessage.remove();
+      chatOutput.innerHTML += `<b>AI:</b> ${aiAnswer}\n\n`;
+
+      chatInput.value = '';
+      chatInput.disabled = false;
+      chatSendBtn.disabled = false;
+      chatInput.focus();
+      chatOutput.scrollTop = chatOutput.scrollHeight;
+    });
+
+    // Send on Enter key press
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            chatSendBtn.click();
+        }
+    });
+    // --- END NEW ---
+
     copyBtn.addEventListener('click', async ()=>{
       try{ await navigator.clipboard.writeText(output.value); alert('Copied to clipboard'); }catch(e){ alert('Copy failed — your browser may block clipboard access.'); }
     });
-
-    clearOutputBtn.addEventListener('click', ()=> output.value='');
 
     downloadBtn.addEventListener('click', ()=>{
       const blob = new Blob([output.value], {type:'text/plain;charset=utf-8'});
@@ -246,12 +298,10 @@
       const a = document.createElement('a'); a.href = url; a.download = 'extracted-text.txt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     });
 
-    // Allow user to change language after init (re-init worker)
     langSel.addEventListener('change', async ()=>{
       if (worker){ await stopWorker(); filesInfo.textContent='Language changed — reinitialize before Extract'; }
     });
 
-    // On page unload, terminate worker
     window.addEventListener('beforeunload', ()=> stopWorker());
   </script>
 </body>
