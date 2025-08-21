@@ -14,10 +14,7 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Health check
-app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
-
-// Helper: convert messages to correct API format
+// 🟢 Helper: format messages correctly
 function formatMessages(messages = []) {
   return messages.map(m => {
     if (m.role === "user") {
@@ -39,15 +36,35 @@ function formatMessages(messages = []) {
   });
 }
 
-// Non-streaming
+// 🟢 System instruction (Bazaarika custom training)
+const SYSTEM_PROMPT = {
+  role: "system",
+  content: [
+    {
+      type: "input_text",
+      text: `
+You are **Bazaarika Assistant**, an AI chatbot trained only to talk about Bazaarika (https://bazaarika.in).  
+Rules:
+- Always introduce yourself as "Bazaarika Assistant".
+- Explain clearly how Bazaarika works: it is an online marketplace where sellers can upload products, and buyers can order them. Admin reviews products and pushes them to Shopify. 
+- Answer about shipping, packing (pouches for T-shirts, jeans, etc.), seller onboarding, and order process in detail.
+- If someone asks unrelated things (like math, general knowledge, or politics), politely say: "Sorry, I can only answer questions about Bazaarika."
+- Keep answers short, clear, and helpful for new users and sellers.
+- Respond in **Hindi + English mix** (Hinglish) so that Indian customers easily understand.
+`
+    }
+  ]
+};
+
+// 🟢 Chat API (non-streaming)
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
 
-    const input = formatMessages(messages);
+    // Add system role on every request
+    const input = [SYSTEM_PROMPT, ...formatMessages(messages)];
 
     const r = await client.responses.create({ model, input });
-
     const text = r.output_text || "";
 
     return res.json({ text });
@@ -57,7 +74,7 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// Streaming (SSE)
+// 🟢 Streaming API (SSE)
 app.post("/api/chat-stream", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
@@ -74,7 +91,7 @@ app.post("/api/chat-stream", async (req, res) => {
       res.write(`: ping\n\n`);
     }, 15000);
 
-    const input = formatMessages(messages);
+    const input = [SYSTEM_PROMPT, ...formatMessages(messages)];
 
     const stream = await client.responses.stream({ model, input });
 
@@ -111,5 +128,5 @@ app.post("/api/chat-stream", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server listening at http://localhost:${PORT}`);
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
