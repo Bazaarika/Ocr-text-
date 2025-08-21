@@ -1,42 +1,63 @@
 import express from "express";
 import cors from "cors";
-import bodyParser from "body-parser";
+import dotenv from "dotenv";
 import OpenAI from "openai";
+
+dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.static("public"));
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-// ✅ Non-streaming endpoint
+// Health check
+app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
+
+// Helper: convert messages to correct API format
+function formatMessages(messages = []) {
+  return messages.map(m => {
+    if (m.role === "user") {
+      return {
+        role: "user",
+        content: [{ type: "input_text", text: String(m.content ?? "") }]
+      };
+    }
+    if (m.role === "assistant") {
+      return {
+        role: "assistant",
+        content: [{ type: "output_text", text: String(m.content ?? "") }]
+      };
+    }
+    return {
+      role: m.role || "user",
+      content: [{ type: "input_text", text: String(m.content ?? "") }]
+    };
+  });
+}
+
+// Non-streaming
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
 
-    // fix: assistant messages -> output_text, user/system -> input_text
-    const input = messages.map(m => ({
-      role: m.role || "user",
-      content: [
-        {
-          type: m.role === "assistant" ? "output_text" : "input_text",
-          text: String(m.content ?? "")
-        }
-      ]
-    }));
+    const input = formatMessages(messages);
 
     const r = await client.responses.create({ model, input });
 
-    return res.json({ text: r.output_text || "" });
+    const text = r.output_text || "";
+
+    return res.json({ text });
   } catch (e) {
-    console.error("Chat error:", e);
+    console.error(e);
     return res.status(500).json({ error: e?.message || "Server error" });
   }
 });
 
-// ✅ Streaming endpoint (SSE)
+// Streaming (SSE)
 app.post("/api/chat-stream", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
@@ -53,16 +74,7 @@ app.post("/api/chat-stream", async (req, res) => {
       res.write(`: ping\n\n`);
     }, 15000);
 
-    // fix: same mapping here
-    const input = messages.map(m => ({
-      role: m.role || "user",
-      content: [
-        {
-          type: m.role === "assistant" ? "output_text" : "input_text",
-          text: String(m.content ?? "")
-        }
-      ]
-    }));
+    const input = formatMessages(messages);
 
     const stream = await client.responses.stream({ model, input });
 
@@ -99,5 +111,5 @@ app.post("/api/chat-stream", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Server ready on port ${PORT}`);
+  console.log(`🚀 Server listening at http://localhost:${PORT}`);
 });
