@@ -6,7 +6,6 @@ import OpenAI from "openai";
 dotenv.config();
 
 const app = express();
-app.set("trust proxy", true);
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
@@ -15,55 +14,54 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Health check route
+// Health check
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
-// Non-streaming chat
+// Non-streaming
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
 
     const input = messages.map(m => ({
       role: m.role || "user",
-      content: [{ type: "text", text: String(m.content ?? "") }]
+      content: [
+        { type: "input_text", text: String(m.content ?? "") }
+      ]
     }));
 
     const r = await client.responses.create({ model, input });
 
-    const text =
-      r.output_text ??
-      (r.output?.map?.(p => p.content?.map?.(c => c.text)?.join("") || "").join("\n") ?? "");
+    const text = r.output_text || "";
 
-    return res.json({ text: text || "" });
+    return res.json({ text });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: e?.message || "Server error" });
   }
 });
 
-// Streaming chat (SSE)
+// Streaming (SSE)
 app.post("/api/chat-stream", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
 
-    // SSE headers
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
-    // Initial ping to client
     res.write(`event: ready\n`);
     res.write(`data: {"ok":true}\n\n`);
 
-    // Heartbeat every 15s (keep connection open on Render)
     const heart = setInterval(() => {
       res.write(`: ping\n\n`);
     }, 15000);
 
     const input = messages.map(m => ({
       role: m.role || "user",
-      content: [{ type: "text", text: String(m.content ?? "") }]
+      content: [
+        { type: "input_text", text: String(m.content ?? "") }
+      ]
     }));
 
     const stream = await client.responses.stream({ model, input });
@@ -80,7 +78,6 @@ app.post("/api/chat-stream", async (req, res) => {
       }
     }
 
-    // Send final text
     res.write(`data: ${JSON.stringify({ done: true, text: fullText })}\n\n`);
     res.write(`event: close\ndata: {}\n\n`);
 
