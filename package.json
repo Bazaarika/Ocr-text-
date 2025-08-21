@@ -1,16 +1,14 @@
 {
-  "name": "chatbot-on-render",
-  "version": "1.0.0",
-  "description": "Minimal ChatGPT API chatbot for Render.com (Node + Express + OpenAI Responses API)",
+  "name": "bazaarika-chatbot-render",
+  "version": "1.1.0",
+  "description": "Simple ChatGPT API chatbot with SSE streaming for Render.com",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
-  "engines": {
-    "node": ">=18"
-  },
+  "engines": { "node": ">=18" },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
