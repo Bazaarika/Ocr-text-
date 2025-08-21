@@ -1,46 +1,42 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
+import bodyParser from "body-parser";
 import OpenAI from "openai";
-
-dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use(express.json());
-app.use(express.static("public"));
+app.use(bodyParser.json());
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Health check
-app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
-
-// Non-streaming
+// ✅ Non-streaming endpoint
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
 
+    // fix: assistant messages -> output_text, user/system -> input_text
     const input = messages.map(m => ({
       role: m.role || "user",
       content: [
-        { type: "input_text", text: String(m.content ?? "") }
+        {
+          type: m.role === "assistant" ? "output_text" : "input_text",
+          text: String(m.content ?? "")
+        }
       ]
     }));
 
     const r = await client.responses.create({ model, input });
 
-    const text = r.output_text || "";
-
-    return res.json({ text });
+    return res.json({ text: r.output_text || "" });
   } catch (e) {
-    console.error(e);
+    console.error("Chat error:", e);
     return res.status(500).json({ error: e?.message || "Server error" });
   }
 });
 
-// Streaming (SSE)
+// ✅ Streaming endpoint (SSE)
 app.post("/api/chat-stream", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
@@ -57,10 +53,14 @@ app.post("/api/chat-stream", async (req, res) => {
       res.write(`: ping\n\n`);
     }, 15000);
 
+    // fix: same mapping here
     const input = messages.map(m => ({
       role: m.role || "user",
       content: [
-        { type: "input_text", text: String(m.content ?? "") }
+        {
+          type: m.role === "assistant" ? "output_text" : "input_text",
+          text: String(m.content ?? "")
+        }
       ]
     }));
 
@@ -99,5 +99,5 @@ app.post("/api/chat-stream", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server listening at http://localhost:${PORT}`);
+  console.log(`✅ Server ready on port ${PORT}`);
 });
