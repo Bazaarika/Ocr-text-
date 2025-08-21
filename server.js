@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import OpenAI from "openai";
+import axios from "axios";
+import { parseStringPromise } from "xml2js";
 
 dotenv.config();
 
@@ -14,7 +16,28 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// 🟢 Helper: format messages correctly
+// ==================== FETCH PRODUCTS FROM SITEMAP ====================
+async function fetchProductsFromSitemap() {
+  try {
+    const url = 'https://bazaarika.in/sitemap_products_1.xml?from=8242438733985&to=8262244335777';
+    const response = await axios.get(url);
+    const xmlData = response.data;
+
+    const parsedData = await parseStringPromise(xmlData);
+    const products = parsedData.urlset.url.map(item => ({
+      loc: item.loc[0],
+      lastmod: item.lastmod[0],
+      // Add other fields if needed
+    }));
+
+    return products;
+  } catch (err) {
+    console.error("Error fetching sitemap:", err);
+    return [];
+  }
+}
+
+// ==================== HELPER: FORMAT MESSAGES ====================
 function formatMessages(messages = []) {
   return messages.map(m => {
     if (m.role === "user") {
@@ -36,45 +59,65 @@ function formatMessages(messages = []) {
   });
 }
 
-// 🟢 System instruction (Bazaarika custom training)
+// ==================== SYSTEM PROMPT ====================
 const SYSTEM_PROMPT = {
   role: "system",
   content: [
     {
       type: "input_text",
       text: `
-You are **Bazaarika Assistant**, an AI chatbot trained only to talk about Bazaarika (https://bazaarika.in).  
+You are "Bazaarika Virtual Assistant", a professional human-like assistant for bazaarika.in.
 Rules:
-- Always introduce yourself as "Bazaarika Assistant".
-- Explain clearly how Bazaarika works: it is an online marketplace where sellers can upload products, and buyers can order them. Admin reviews products and pushes them to Shopify. 
-- Answer about shipping, packing (pouches for T-shirts, jeans, etc.), seller onboarding, and order process in detail.
-- If someone asks unrelated things (like math, general knowledge, or politics), politely say: "Sorry, I can only answer questions about Bazaarika."
-- Keep answers short, clear, and helpful for new users and sellers.
-- Respond in **Hindi + English mix** (Hinglish) so that Indian customers easily understand.
+- Answer customer queries professionally and helpfully.
+- Provide info about products, pricing, shipping, customer care, returns, payment methods, and trading.
+- Use latest Bazaarika data provided in context.
+- If unrelated questions asked, politely redirect: "Sorry, main sirf Bazaarika ke baare mein hi help kar sakta hoon."
+- Reply in Hindi + English mix (Hinglish).
+- Keep tone friendly, natural, and accurate.
 `
     }
   ]
 };
 
-// 🟢 Chat API (non-streaming)
+// ==================== HELPER: GET CONTEXT FROM SITEMAP ====================
+async function getSitemapContext(query) {
+  const products = await fetchProductsFromSitemap();
+  const lowerQuery = query.toLowerCase();
+
+  // Match products containing query in URL (simple example)
+  const matched = products.filter(p => p.loc.toLowerCase().includes(lowerQuery));
+
+  if (matched.length === 0) return "No specific product info found, answer generally about Bazaarika.";
+  return matched.map(p => `Product URL: ${p.loc} | Last Updated: ${p.lastmod}`).join("\n");
+}
+
+// ==================== NON-STREAMING CHAT ====================
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
+    const lastUserMsg = messages[messages.length - 1]?.content ?? "";
+    const contextText = await getSitemapContext(lastUserMsg);
 
-    // Add system role on every request
-    const input = [SYSTEM_PROMPT, ...formatMessages(messages)];
+    const input = [
+      SYSTEM_PROMPT,
+      {
+        role: "system",
+        content: [{ type: "input_text", text: `Sitemap / Product Data Context: ${contextText}` }]
+      },
+      ...formatMessages(messages)
+    ];
 
-    const r = await client.responses.create({ model, input });
-    const text = r.output_text || "";
+    const response = await client.responses.create({ model, input });
+    const text = response.output_text || "";
 
     return res.json({ text });
   } catch (e) {
-    console.error(e);
+    console.error("Error:", e);
     return res.status(500).json({ error: e?.message || "Server error" });
   }
 });
 
-// 🟢 Streaming API (SSE)
+// ==================== STREAMING CHAT ====================
 app.post("/api/chat-stream", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
@@ -87,11 +130,19 @@ app.post("/api/chat-stream", async (req, res) => {
     res.write(`event: ready\n`);
     res.write(`data: {"ok":true}\n\n`);
 
-    const heart = setInterval(() => {
-      res.write(`: ping\n\n`);
-    }, 15000);
+    const heart = setInterval(() => res.write(`: ping\n\n`), 15000);
 
-    const input = [SYSTEM_PROMPT, ...formatMessages(messages)];
+    const lastUserMsg = messages[messages.length - 1]?.content ?? "";
+    const contextText = await getSitemapContext(lastUserMsg);
+
+    const input = [
+      SYSTEM_PROMPT,
+      {
+        role: "system",
+        content: [{ type: "input_text", text: `Sitemap / Product Data Context: ${contextText}` }]
+      },
+      ...formatMessages(messages)
+    ];
 
     const stream = await client.responses.stream({ model, input });
 
@@ -126,7 +177,8 @@ app.post("/api/chat-stream", async (req, res) => {
   }
 });
 
+// ==================== HEALTH CHECK ====================
+app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}`));
