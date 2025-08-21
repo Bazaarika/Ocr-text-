@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import OpenAI from "openai";
 import axios from "axios";
 import { parseStringPromise } from "xml2js";
+import path from "path";
 
 dotenv.config();
 
@@ -16,50 +17,20 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// ==================== FETCH PRODUCTS FROM SITEMAP ====================
-async function fetchProductsFromSitemap() {
-  try {
-    const url = 'https://bazaarika.in/sitemap_products_1.xml?from=8242438733985&to=8262244335777';
-    const response = await axios.get(url);
-    const xmlData = response.data;
-
-    const parsedData = await parseStringPromise(xmlData);
-    const products = parsedData.urlset.url.map(item => ({
-      loc: item.loc[0],
-      lastmod: item.lastmod[0],
-      // Add other fields if needed
-    }));
-
-    return products;
-  } catch (err) {
-    console.error("Error fetching sitemap:", err);
-    return [];
-  }
-}
-
-// ==================== HELPER: FORMAT MESSAGES ====================
+// Helper: format messages
 function formatMessages(messages = []) {
   return messages.map(m => {
     if (m.role === "user") {
-      return {
-        role: "user",
-        content: [{ type: "input_text", text: String(m.content ?? "") }]
-      };
+      return { role: "user", content: [{ type: "input_text", text: String(m.content ?? "") }] };
     }
     if (m.role === "assistant") {
-      return {
-        role: "assistant",
-        content: [{ type: "output_text", text: String(m.content ?? "") }]
-      };
+      return { role: "assistant", content: [{ type: "output_text", text: String(m.content ?? "") }] };
     }
-    return {
-      role: m.role || "user",
-      content: [{ type: "input_text", text: String(m.content ?? "") }]
-    };
+    return { role: m.role || "user", content: [{ type: "input_text", text: String(m.content ?? "") }] };
   });
 }
 
-// ==================== SYSTEM PROMPT ====================
+// System prompt
 const SYSTEM_PROMPT = {
   role: "system",
   content: [
@@ -79,19 +50,37 @@ Rules:
   ]
 };
 
-// ==================== HELPER: GET CONTEXT FROM SITEMAP ====================
+// Fetch products from XML sitemap
+async function fetchProductsFromSitemap() {
+  try {
+    const url = 'https://bazaarika.in/sitemap_products_1.xml?from=8242438733985&to=8262244335777';
+    const response = await axios.get(url);
+    const xmlData = response.data;
+    const parsedData = await parseStringPromise(xmlData);
+
+    const products = parsedData.urlset.url.map(item => ({
+      loc: item.loc[0],
+      lastmod: item.lastmod[0]
+    }));
+
+    return products;
+  } catch (err) {
+    console.error("Error fetching sitemap:", err);
+    return [];
+  }
+}
+
+// Generate context from sitemap based on user query
 async function getSitemapContext(query) {
   const products = await fetchProductsFromSitemap();
   const lowerQuery = query.toLowerCase();
-
-  // Match products containing query in URL (simple example)
   const matched = products.filter(p => p.loc.toLowerCase().includes(lowerQuery));
 
   if (matched.length === 0) return "No specific product info found, answer generally about Bazaarika.";
   return matched.map(p => `Product URL: ${p.loc} | Last Updated: ${p.lastmod}`).join("\n");
 }
 
-// ==================== NON-STREAMING CHAT ====================
+// NON-STREAMING
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
@@ -100,16 +89,12 @@ app.post("/api/chat", async (req, res) => {
 
     const input = [
       SYSTEM_PROMPT,
-      {
-        role: "system",
-        content: [{ type: "input_text", text: `Sitemap / Product Data Context: ${contextText}` }]
-      },
+      { role: "system", content: [{ type: "input_text", text: `Sitemap Context: ${contextText}` }] },
       ...formatMessages(messages)
     ];
 
     const response = await client.responses.create({ model, input });
     const text = response.output_text || "";
-
     return res.json({ text });
   } catch (e) {
     console.error("Error:", e);
@@ -117,11 +102,10 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// ==================== STREAMING CHAT ====================
+// STREAMING
 app.post("/api/chat-stream", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
-
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
@@ -131,21 +115,16 @@ app.post("/api/chat-stream", async (req, res) => {
     res.write(`data: {"ok":true}\n\n`);
 
     const heart = setInterval(() => res.write(`: ping\n\n`), 15000);
-
     const lastUserMsg = messages[messages.length - 1]?.content ?? "";
     const contextText = await getSitemapContext(lastUserMsg);
 
     const input = [
       SYSTEM_PROMPT,
-      {
-        role: "system",
-        content: [{ type: "input_text", text: `Sitemap / Product Data Context: ${contextText}` }]
-      },
+      { role: "system", content: [{ type: "input_text", text: `Sitemap Context: ${contextText}` }] },
       ...formatMessages(messages)
     ];
 
     const stream = await client.responses.stream({ model, input });
-
     let fullText = "";
 
     for await (const event of stream) {
@@ -177,7 +156,7 @@ app.post("/api/chat-stream", async (req, res) => {
   }
 });
 
-// ==================== HEALTH CHECK ====================
+// HEALTH CHECK
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
 const PORT = process.env.PORT || 3000;
