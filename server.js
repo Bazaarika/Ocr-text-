@@ -11,12 +11,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
-// health
+// Health check route
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
-// simple non-stream endpoint (fallback)
+// Non-streaming chat
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
@@ -39,22 +41,22 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// robust SSE streaming (works on Render)
+// Streaming chat (SSE)
 app.post("/api/chat-stream", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
 
-    // ---- SSE headers (anti-buffering) ----
+    // SSE headers
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no"); // nginx/proxy hint
+    res.setHeader("X-Accel-Buffering", "no");
 
-    // send initial "connected" ping
+    // Initial ping to client
     res.write(`event: ready\n`);
     res.write(`data: {"ok":true}\n\n`);
 
-    // heartbeat to keep connection alive (Render friendly)
+    // Heartbeat every 15s (keep connection open on Render)
     const heart = setInterval(() => {
       res.write(`: ping\n\n`);
     }, 15000);
@@ -66,30 +68,24 @@ app.post("/api/chat-stream", async (req, res) => {
 
     const stream = await client.responses.stream({ model, input });
 
-    stream.on("response.output_text.delta", (delta) => {
-      res.write(`data: ${JSON.stringify({ delta })}\n\n`);
-    });
+    let fullText = "";
 
-    stream.on("response.output_text.done", (full) => {
-      res.write(`data: ${JSON.stringify({ done: true, text: full })}\n\n`);
-    });
-
-    stream.on("end", () => {
-      clearInterval(heart);
-      res.write(`event: close\ndata: {}\n\n`);
-      res.end();
-    });
-
-    stream.on("error", (err) => {
-      clearInterval(heart);
-      try {
-        res.write(`data: ${JSON.stringify({ error: err?.message || "Stream error" })}\n\n`);
-      } finally {
-        res.end();
+    for await (const event of stream) {
+      if (event.type === "response.output_text.delta") {
+        res.write(`data: ${JSON.stringify({ delta: event.delta })}\n\n`);
+        fullText += event.delta;
       }
-    });
+      if (event.type === "response.error") {
+        res.write(`data: ${JSON.stringify({ error: event.error.message })}\n\n`);
+      }
+    }
 
-    await stream.consume();
+    // Send final text
+    res.write(`data: ${JSON.stringify({ done: true, text: fullText })}\n\n`);
+    res.write(`event: close\ndata: {}\n\n`);
+
+    clearInterval(heart);
+    res.end();
   } catch (e) {
     console.error("SSE error:", e);
     if (!res.headersSent) {
@@ -105,4 +101,6 @@ app.post("/api/chat-stream", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`→ http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Server listening at http://localhost:${PORT}`);
+});
