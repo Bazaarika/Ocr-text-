@@ -1,15 +1,20 @@
 {
-  "name": "ocr-ai-tool",
+  "name": "chatbot-on-render",
   "version": "1.0.0",
-  "description": "OCR with AI integration",
+  "description": "Minimal ChatGPT API chatbot for Render.com (Node + Express + OpenAI Responses API)",
   "main": "server.js",
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^16.0.3",
-    "express": "^4.18.2",
-    "openai": "^3.1.0"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "openai": "^4.59.0"
   }
 }
