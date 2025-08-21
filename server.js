@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import OpenAI from "openai";
+import { GoogleSearch } from "@google/generative-ai";
 
 dotenv.config();
 
@@ -36,6 +37,23 @@ function formatMessages(messages = []) {
   });
 }
 
+// 🟢 Helper: Google Search API integration
+async function googleSearchAndFormat(query) {
+  try {
+    const searchClient = new GoogleSearch({ apiKey: process.env.GOOGLE_SEARCH_API_KEY });
+    const response = await searchClient.run(query, { numResults: 3, site: "bazaarika.in" });
+    const formattedResults = response.results.map(result => ({
+      title: result.title,
+      snippet: result.snippet,
+      url: result.url
+    }));
+    return JSON.stringify(formattedResults);
+  } catch (error) {
+    console.error("Google Search error:", error);
+    return "No relevant information found on Bazaarika.in.";
+  }
+}
+
 // 🟢 System instruction (Bazaarika custom training)
 const SYSTEM_PROMPT = {
   role: "system",
@@ -43,12 +61,13 @@ const SYSTEM_PROMPT = {
     {
       type: "input_text",
       text: `
-You are **Bazaarika Assistant**, an AI chatbot trained only to talk about Bazaarika (https://bazaarika.in).  
+You are **Bazaarika Assistant**, an AI chatbot trained to provide information only about Bazaarika (https://bazaarika.in).
 Rules:
 - Always introduce yourself as "Bazaarika Assistant".
-- Explain clearly how Bazaarika works: it is an online marketplace where sellers can upload products, and buyers can order them. Admin reviews products and pushes them to Shopify. 
-- Answer about shipping, packing (pouches for T-shirts, jeans, etc.), seller onboarding, and order process in detail.
-- If someone asks unrelated things (like math, general knowledge, or politics), politely say: "Sorry, I can only answer questions about Bazaarika."
+- Explain clearly how Bazaarika works: it is an online marketplace where sellers can upload products, and buyers can order them.
+- If a user asks a question, first check for related information on Bazaarika.in using the search function.
+- Answer questions about shipping rates, customer care number, trending products, and specific product details by searching the website.
+- If someone asks unrelated things (like math, general knowledge, or politics), politely say: "Sorry, I can only answer questions about Bazaarika. If you have any questions about our products or services, please let me know."
 - Keep answers short, clear, and helpful for new users and sellers.
 - Respond in **Hindi + English mix** (Hinglish) so that Indian customers easily understand.
 `
@@ -60,9 +79,19 @@ Rules:
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
+    const userMessage = messages[messages.length - 1]?.content;
 
-    // Add system role on every request
-    const input = [SYSTEM_PROMPT, ...formatMessages(messages)];
+    let searchData = "";
+    if (userMessage) {
+      searchData = await googleSearchAndFormat(userMessage);
+    }
+    
+    const contextPrompt = {
+      role: "user",
+      content: [{ type: "input_text", text: `User query: "${userMessage}". Bazaarika.in search results: ${searchData}` }]
+    };
+
+    const input = [SYSTEM_PROMPT, contextPrompt, ...formatMessages(messages)];
 
     const r = await client.responses.create({ model, input });
     const text = r.output_text || "";
@@ -78,6 +107,7 @@ app.post("/api/chat", async (req, res) => {
 app.post("/api/chat-stream", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
+    const userMessage = messages[messages.length - 1]?.content;
 
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -91,7 +121,17 @@ app.post("/api/chat-stream", async (req, res) => {
       res.write(`: ping\n\n`);
     }, 15000);
 
-    const input = [SYSTEM_PROMPT, ...formatMessages(messages)];
+    let searchData = "";
+    if (userMessage) {
+      searchData = await googleSearchAndFormat(userMessage);
+    }
+
+    const contextPrompt = {
+      role: "user",
+      content: [{ type: "input_text", text: `User query: "${userMessage}". Bazaarika.in search results: ${searchData}` }]
+    };
+
+    const input = [SYSTEM_PROMPT, contextPrompt, ...formatMessages(messages)];
 
     const stream = await client.responses.stream({ model, input });
 
