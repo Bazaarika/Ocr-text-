@@ -14,7 +14,7 @@ app.use(express.static("public"));
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Format messages
+// Format messages for OpenAI
 function formatMessages(messages = []) {
   return messages.map(m => ({
     role: m.role,
@@ -22,14 +22,17 @@ function formatMessages(messages = []) {
   }));
 }
 
-// System prompt
+// System prompt for AI
 const SYSTEM_PROMPT = {
   role: "system",
-  content: [{ type: "input_text", text: `
+  content: [{
+    type: "input_text",
+    text: `
 You are "Bazaarika Virtual Assistant", professional assistant for bazaarika.in.
 Answer queries about products, pricing, shipping, returns, payment, customer care.
 Use context from sitemap or database. Reply in Hindi+English (Hinglish), friendly and accurate.
-` }]
+`
+  }]
 };
 
 // Fetch products from sitemap
@@ -45,23 +48,28 @@ async function fetchProductsFromSitemap() {
   }
 }
 
-// Generate context
+// Generate context from sitemap
 async function getSitemapContext(query) {
   const products = await fetchProductsFromSitemap();
-  const lower = query.toLowerCase();
-  const matched = products.filter(p => p.loc.toLowerCase().includes(lower));
+  const lowerQuery = query.toLowerCase();
+  const matched = products.filter(p => p.loc.toLowerCase().includes(lowerQuery));
   if (!matched.length) return "No specific product info found, answer generally about Bazaarika.";
   return matched.map(p => `Product URL: ${p.loc} | Last Updated: ${p.lastmod}`).join("\n");
 }
 
-// NON-STREAMING CHAT
+// Non-streaming chat endpoint
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], model = "gpt-4o-mini" } = req.body;
     const lastUserMsg = messages[messages.length - 1]?.content || "";
     const context = await getSitemapContext(lastUserMsg);
 
-    const input = [SYSTEM_PROMPT, { role:"system", content:[{type:"input_text", text:`Context: ${context}`}] }, ...formatMessages(messages)];
+    const input = [
+      SYSTEM_PROMPT,
+      { role: "system", content: [{ type: "input_text", text: `Context: ${context}` }] },
+      ...formatMessages(messages)
+    ];
+
     const response = await client.responses.create({ model, input });
     res.json({ text: response.output_text || "" });
   } catch (err) {
@@ -70,7 +78,7 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// HEALTH CHECK
+// Health check
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
 const PORT = process.env.PORT || 3000;
