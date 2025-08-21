@@ -2,307 +2,61 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Instant Image → Text (OCR) with AI & Live Chat</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, user-scalable=no"
+  />
+  <title>Bazaarika Chatbot</title>
   <style>
-    :root{--bg:#0f172a;--card:#0b1220;--accent:#10b981;--muted:#94a3b8;color-scheme: dark}
-    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,system-ui,-apple-system;background:linear-gradient(180deg,#071025 0%, #07172b 100%);color:#e6eef8}
-    .wrap{max-width:920px;margin:28px auto;padding:20px}
-    .card{background:rgba(255,255,255,0.03);border-radius:12px;padding:18px;box-shadow:0 6px 24px rgba(2,6,23,0.6)}
-    h1{margin:0 0 8px;font-size:20px}
-    p.lead{margin:0 0 18px;color:var(--muted)}
-
-    .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-    .btn{background:var(--accent);color:#042018;padding:10px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:600}
-    .btn.secondary{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.06)}
-    .filedrop{border:2px dashed rgba(255,255,255,0.05);border-radius:12px;padding:18px;display:flex;align-items:center;gap:16px}
-    .thumb{width:120px;height:80px;border-radius:8px;object-fit:cover;background:#071728}
-    .meta{flex:1}
-    .progress{height:10px;background:rgba(255,255,255,0.04);border-radius:999px;overflow:hidden;margin-top:8px}
-    .progress > i{display:block;height:100%;width:0;background:linear-gradient(90deg,#34d399,#06b6d4)}
-    textarea{width:100%;min-height:280px;margin-top:12px;padding:12px;border-radius:10px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.03);color:inherit;font-size:14px}
-    .row{display:flex;gap:12px}
-    .select{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);color:inherit}
-    
-    .chat-section{margin-top:20px;padding:18px;background:rgba(255,255,255,0.03);border-radius:12px;box-shadow:0 6px 24px rgba(2,6,23,0.6)}
-    .chat-output{min-height:200px;max-height:400px;overflow-y:auto;border:1px solid rgba(255,255,255,0.03);border-radius:8px;padding:12px;background:rgba(0,0,0,0.4);margin-bottom:12px;white-space:pre-wrap;font-size:14px}
-    .chat-input-row{display:flex;gap:10px;margin-top:12px}
-    .chat-input-row textarea{min-height:50px;margin:0;flex:1}
-    
-    footer{margin-top:12px;color:var(--muted);font-size:13px}
-    @media (max-width:680px){.row{flex-direction:column}.thumb{width:100%;height:160px}}
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background:#0b1020; color:#eaf0ff; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 24px; }
+    .card { background:#111832; border:1px solid #203055; border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .row { display: flex; gap: 12px; align-items: stretch; }
+    textarea { flex:1; min-height: 64px; resize: vertical; border-radius: 12px; border:1px solid #31406a; background:#0d1430; color:#eaf0ff; padding: 12px; }
+    button { border:0; border-radius: 12px; padding: 12px 16px; background:#47a3ff; color:#00112a; font-weight: 700; cursor:pointer; }
+    button[disabled] { opacity:.6; cursor:not-allowed; }
+    .chat { margin-top: 16px; display:flex; flex-direction:column; gap:12px; }
+    .msg { white-space: pre-wrap; line-height: 1.5; }
+    .user { background:#0e1a3d; padding:12px; border-radius:12px; }
+    .ai { background:#0a233f; padding:12px; border-radius:12px; }
+    .meta { font-size: 12px; opacity: .7; margin-bottom: 6px; }
+    .top { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+    select { background:#0d1430; color:#eaf0ff; border:1px solid #31406a; border-radius:10px; padding:10px; }
+    label { font-size: 12px; opacity: .8; }
+    .toolbar { display:flex; gap:12px; align-items:center; }
+    .stream-dot { display:inline-block; width:8px; height:8px; background:#47a3ff; border-radius:50%; margin-left:6px; animation: pulse 800ms infinite alternate; }
+    @keyframes pulse { from { opacity:.3; } to { opacity:1; } }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>Instant Image → Text (OCR) with AI</h1>
-      <p class="lead">Upload or drop images to extract text and get an AI answer. For best results, ask a clear question in the image text.</p>
-
-      <div class="controls">
-        <input id="fileInput" type="file" accept="image/*" multiple style="display:none"/>
-        <button id="pickBtn" class="btn">Select images</button>
-        <button id="pasteBtn" class="btn secondary">Paste image from clipboard</button>
-        <select id="langSel" class="select">
-          <option value="eng">English (eng)</option>
-          <option value="hin">Hindi (hin)</option>
-          <option value="eng+hin">English + Hindi</option>
-        </select>
-        <button id="startBtn" class="btn">Extract Text & Ask AI</button>
-        <button id="stopBtn" class="btn secondary" style="display:none">Stop</button>
-      </div>
-
-      <div id="dropzone" class="filedrop">
-        <img id="preview" class="thumb" src="" alt="preview" style="display:none" />
-        <div class="meta">
-          <div style="display:flex;gap:10px;align-items:center;justify-content:space-between">
-            <div id="filesInfo">No files selected</div>
-            <div style="display:flex;gap:8px">
-              <button id="clearBtn" class="btn secondary">Clear</button>
-            </div>
-          </div>
-          <div class="progress" style="margin-top:10px"><i id="progBar"></i></div>
-          <div style="margin-top:8px;color:var(--muted);font-size:13px">Tip: For best results use clear photos with readable fonts.</div>
+      <div class="top">
+        <h2 style="margin:0;">🤖 Bazaarika Chatbot</h2>
+        <div class="toolbar">
+          <label>
+            Model:
+            <select id="model">
+              <option value="gpt-4o-mini">gpt-4o-mini (recommended)</option>
+              <option value="gpt-4o">gpt-4o</option>
+            </select>
+          </label>
+          <label>
+            <input type="checkbox" id="useStream" checked />
+            Streaming <span class="stream-dot"></span>
+          </label>
         </div>
       </div>
 
-      <textarea id="output" placeholder="Extracted text from images will appear here..." spellcheck="false"></textarea>
+      <div class="row">
+        <textarea id="input" placeholder="Apna sawal likhiye..."></textarea>
+        <button id="send">Send</button>
+      </div>
 
-      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
-        <button id="copyBtn" class="btn secondary">Copy OCR Text</button>
-        <button id="downloadBtn" class="btn">Download .txt</button>
-        <button id="clearOutputBtn" class="btn secondary">Clear OCR Output</button>
-      </div>
-      
-      <div class="chat-section">
-        <h2>Live Chat with AI</h2>
-        <div id="chatOutput" class="chat-output"></div>
-        <div class="chat-input-row">
-          <textarea id="chatInput" placeholder="Ask AI a question..."></textarea>
-          <button id="chatSendBtn" class="btn">Send</button>
-        </div>
-      </div>
-      
-      <footer>Powered by <strong>Tesseract.js</strong> and a backend AI.</footer>
+      <div id="chat" class="chat"></div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
-  <script>
-    // Elements
-    const fileInput = document.getElementById('fileInput');
-    const pickBtn = document.getElementById('pickBtn');
-    const pasteBtn = document.getElementById('pasteBtn');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const preview = document.getElementById('preview');
-    const filesInfo = document.getElementById('filesInfo');
-    const progBar = document.getElementById('progBar');
-    const output = document.getElementById('output');
-    const copyBtn = document.getElementById('copyBtn');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const clearOutputBtn = document.getElementById('clearOutputBtn');
-    const dropzone = document.getElementById('dropzone');
-    const langSel = document.getElementById('langSel');
-
-    // New Chat elements
-    const chatInput = document.getElementById('chatInput');
-    const chatSendBtn = document.getElementById('chatSendBtn');
-    const chatOutput = document.getElementById('chatOutput');
-
-    let files = [];
-    let worker = null;
-    let isRunning = false;
-
-    // Helpers
-    function humanFiles() {
-      if (files.length === 0) return 'No files selected';
-      return `Selected ${files.length} file(s).`;
-    }
-
-    function showPreview(file){
-      const url = URL.createObjectURL(file);
-      preview.src = url; 
-      preview.style.display = 'block';
-    }
-
-    pickBtn.addEventListener('click', ()=> fileInput.click());
-    fileInput.addEventListener('change', e=>{
-      const chosen = Array.from(e.target.files);
-      files = files.concat(chosen);
-      filesInfo.textContent = humanFiles();
-      if (files.length > 0) showPreview(files[0]);
-    });
-
-    ['dragenter','dragover'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.style.borderColor = '#2dd4bf' }));
-    ['dragleave','drop'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.style.borderColor='rgba(255,255,255,0.05)'}));
-    dropzone.addEventListener('drop', e=>{
-      const dt = e.dataTransfer;
-      if (!dt) return;
-      const dropped = Array.from(dt.files || []).filter(f=> f.type && f.type.startsWith('image'));
-      files = files.concat(dropped);
-      filesInfo.textContent = humanFiles();
-      if (files.length > 0) showPreview(files[0]);
-    });
-
-    pasteBtn.addEventListener('click', async ()=>{
-      try{
-        const items = await navigator.clipboard.read();
-        for (const it of items){
-          if (it.types.includes('image/png') || it.types.find(t=>t.startsWith('image/'))){
-            const blob = await it.getType(it.types.find(t=>t.startsWith('image/')));
-            files.push(new File([blob], `pasted-image-${files.length + 1}.png`, {type: blob.type}));
-          }
-        }
-        filesInfo.textContent = humanFiles();
-        if (files.length > 0) showPreview(files[0]);
-      }catch(err){
-        alert('Clipboard paste failed. On many Android devices, paste from clipboard is not available. You can long-press an image and use Share → Copy, or use Select images.');
-        console.error(err);
-      }
-    });
-
-    clearBtn.addEventListener('click', ()=>{ files = []; preview.style.display='none'; filesInfo.textContent = humanFiles(); progBar.style.width='0%'; output.value=''; });
-    clearOutputBtn.addEventListener('click', ()=> output.value='');
-
-    // OCR flow using Tesseract.js worker
-    async function initWorker(){
-      if (worker) return worker;
-      worker = Tesseract.createWorker({
-        logger: m => {
-          if (m.status === 'recognizing text' || m.status === 'loading tesseract core' || m.status === 'initializing tesseract'){ 
-            const p = Math.round((m.progress || 0) * 100);
-            progBar.style.width = p + '%';
-          }
-        }
-      });
-      await worker.load();
-      const lang = langSel.value || 'eng';
-      await worker.loadLanguage(lang);
-      await worker.initialize(lang);
-      return worker;
-    }
-
-    async function stopWorker(){
-      if (!worker) return;
-      try{ await worker.terminate(); }catch(e){}
-      worker = null;
-    }
-
-    // --- FIX: Backend URL को यहाँ जोड़ें ---
-    // अपनी Render Web Service का URL यहाँ डालें (उदाहरण: https://my-ocr-backend.onrender.com)
-    const BACKEND_URL = 'https://ocr-text.onrender.com'; 
-
-    async function getAIResponse(prompt) {
-      try {
-        const response = await fetch(`${BACKEND_URL}/ask-ai`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ prompt: prompt }),
-        });
-        const data = await response.json();
-        return data.answer || 'No answer from AI. Please check the backend server logs.';
-      } catch (error) {
-        console.error('Error:', error);
-        return 'Failed to get a response from AI. The backend server might be down or URL is incorrect.';
-      }
-    }
-    // --- END FIX ---
-
-    startBtn.addEventListener('click', async ()=>{
-      if (files.length === 0){ alert('Please select or drop at least one image first.'); return; }
-      isRunning = true; 
-      startBtn.style.display='none'; 
-      stopBtn.style.display='inline-block';
-      output.value = '';
-      let combinedText = '';
-
-      try{
-        await initWorker();
-        for (let i = 0; i < files.length; i++){
-          if (!isRunning) break;
-          const file = files[i];
-          filesInfo.textContent = `Processing ${i + 1} of ${files.length} — ${file.name || 'image'}`;
-          showPreview(file);
-          const { data: { text } } = await worker.recognize(file);
-          combinedText += text.trim() + '\n\n';
-          output.value += `--- Extracted Text from Image ${i + 1}: ${file.name || 'pasted-image'} ---\n\n` + text.trim() + '\n\n';
-          progBar.style.width = '0%';
-        }
-
-        if (combinedText.trim().length > 0) {
-          output.value += `\n\n--- Asking AI for an answer... ---\n`;
-          const aiAnswer = await getAIResponse(combinedText);
-          output.value += `\n\n--- AI Response ---\n\n` + aiAnswer;
-        }
-
-      }catch(err){
-        console.error(err); 
-        alert('OCR failed: ' + (err.message || err));
-      } finally{
-        isRunning = false; 
-        startBtn.style.display='inline-block'; 
-        stopBtn.style.display='none';
-        filesInfo.textContent = humanFiles();
-      }
-    });
-
-    stopBtn.addEventListener('click', ()=>{ isRunning = false; stopBtn.style.display='none'; startBtn.style.display='inline-block'; filesInfo.textContent='Stopped by user'; stopWorker(); });
-
-    chatSendBtn.addEventListener('click', async () => {
-      const prompt = chatInput.value.trim();
-      if (prompt === "") {
-        alert('Please type a question to chat with AI.');
-        return;
-      }
-
-      chatInput.disabled = true;
-      chatSendBtn.disabled = true;
-      chatOutput.innerHTML += `<b>You:</b> ${prompt}\n\n`;
-
-      const loadingMessage = document.createElement('div');
-      loadingMessage.textContent = 'AI is thinking...';
-      loadingMessage.style.color = 'var(--muted)';
-      chatOutput.appendChild(loadingMessage);
-      chatOutput.scrollTop = chatOutput.scrollHeight;
-
-      const aiAnswer = await getAIResponse(prompt);
-
-      loadingMessage.remove();
-      chatOutput.innerHTML += `<b>AI:</b> ${aiAnswer}\n\n`;
-
-      chatInput.value = '';
-      chatInput.disabled = false;
-      chatSendBtn.disabled = false;
-      chatInput.focus();
-      chatOutput.scrollTop = chatOutput.scrollHeight;
-    });
-
-    chatInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            chatSendBtn.click();
-        }
-    });
-
-    copyBtn.addEventListener('click', async ()=>{
-      try{ await navigator.clipboard.writeText(output.value); alert('Copied to clipboard'); }catch(e){ alert('Copy failed — your browser may block clipboard access.'); }
-    });
-
-    downloadBtn.addEventListener('click', ()=>{
-      const blob = new Blob([output.value], {type:'text/plain;charset=utf-8'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'extracted-text.txt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    });
-
-    langSel.addEventListener('change', async ()=>{
-      if (worker){ await stopWorker(); filesInfo.textContent='Language changed — reinitialize before Extract'; }
-    });
-
-    window.addEventListener('beforeunload', ()=> stopWorker());
-  </script>
+  <script src="./app.js"></script>
 </body>
 </html>
