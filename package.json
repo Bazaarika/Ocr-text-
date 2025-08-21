@@ -1,18 +1,17 @@
 {
-  "name": "bazaarika-chatbot-render",
-  "version": "1.1.0",
-  "description": "Simple ChatGPT API chatbot with SSE streaming for Render.com",
+  "name": "bazaarika-chatbot",
+  "version": "1.0.0",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node server.js"
   },
-  "engines": { "node": ">=18" },
   "dependencies": {
+    "axios": "^1.6.6",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "openai": "^4.59.0"
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "openai": "^5.3.0",
+    "xml2js": "^0.5.3"
   }
 }
